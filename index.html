@@ -871,16 +871,30 @@ async function loadSheetsData() {
       range: 'Historikk!A2:I1000'
     });
     const rows = res.result.values || [];
-    sheetsData = rows.map(r => ({
-      date: r[0] || '',
-      ask: parseFloat(r[1]) || 0,
-      af: parseFloat(r[2]) || 0,
-      fond: parseFloat(r[3]) || 0,
-      ips: parseFloat(r[4]) || 0,
-      apcoa1: parseFloat(r[5]) || 0,
-      apcoa2: parseFloat(r[6]) || 0,
-      saving: parseFloat(r[7]) || settings.monthlySaving,
-    }));
+
+    if (rows.length === 0) {
+      updateDashboard();
+      return;
+    }
+
+    sheetsData = rows
+      .filter(r => r[0] && r[0].trim() !== '')
+      .map(r => {
+        const historisk = parseFloat(r[8]) || 0;
+        const ask  = parseFloat(r[1]) || 0;
+        const af   = parseFloat(r[2]) || 0;
+        const fond = parseFloat(r[3]) || 0;
+        const ips  = parseFloat(r[4]) || 0;
+        return {
+          date: r[0].trim(),
+          ask, af, fond, ips,
+          apcoa1: parseFloat(r[5]) || 0,
+          apcoa2: parseFloat(r[6]) || 0,
+          saving: parseFloat(r[7]) || settings.monthlySaving,
+          totalOverride: (ask + af + fond + ips === 0 && historisk > 0) ? historisk : 0,
+        };
+      });
+
     sheetsData.sort((a, b) => a.date.localeCompare(b.date));
     updateDashboard();
     renderHistory();
@@ -956,16 +970,18 @@ function showSaveStatus(msg, type) {
 // ============================================================
 function updateDashboard() {
   if (sheetsData.length === 0) {
-    // Use seed data from screenshots
     sheetsData = [{
       date: '2025-04',
       ask: 984612, af: 134150, fond: 2162843, ips: 125758,
-      apcoa1: 980342, apcoa2: 472884, saving: 5000
+      apcoa1: 980342, apcoa2: 472884, saving: 5000,
+      totalOverride: 0,
     }];
   }
 
   const latest = sheetsData[sheetsData.length - 1];
-  const privateTotal = latest.ask + latest.af + latest.fond + latest.ips;
+  const privateTotal = latest.totalOverride > 0
+    ? latest.totalOverride
+    : latest.ask + latest.af + latest.fond + latest.ips;
   const apcoaTotal = latest.apcoa1 + latest.apcoa2;
 
   // Hero
@@ -1022,11 +1038,12 @@ function renderProjectionChart(currentVal, monthly, annualRate, yearsLeft) {
   const goalLine = [];
   const currentYear = new Date().getFullYear();
 
-  // Historical data points (yearly)
+  // Historical data points (yearly - use totalOverride for legacy rows)
   const yearlyData = {};
   sheetsData.forEach(r => {
     const yr = r.date.substring(0, 4);
-    yearlyData[yr] = r.ask + r.af + r.fond + r.ips;
+    const total = r.totalOverride > 0 ? r.totalOverride : r.ask + r.af + r.fond + r.ips;
+    if (total > 0) yearlyData[yr] = total;
   });
 
   // Build chart data: historical + projection
@@ -1119,7 +1136,9 @@ function renderProjectionChart(currentVal, monthly, annualRate, yearsLeft) {
             maxTicksLimit: 8,
             callback: (val, idx, ticks) => {
               const yr = parseInt(labels[idx]);
-              if ([currentYear, settings.goalYear, currentYear + 5, currentYear + 10].includes(yr)) return yr;
+              const startYr = parseInt(labels[0]);
+              // Show every 3rd year for readability
+              if ((yr - startYr) % 3 === 0 || yr === settings.goalYear) return yr;
               return '';
             }
           }
@@ -1148,9 +1167,9 @@ function renderHistory() {
 
   const sorted = [...sheetsData].reverse();
   container.innerHTML = sorted.map((r, i) => {
-    const total = r.ask + r.af + r.fond + r.ips;
+    const total = r.totalOverride > 0 ? r.totalOverride : r.ask + r.af + r.fond + r.ips;
     const prev = sorted[i + 1];
-    const prevTotal = prev ? (prev.ask + prev.af + prev.fond + prev.ips) : null;
+    const prevTotal = prev ? (prev.totalOverride > 0 ? prev.totalOverride : prev.ask + prev.af + prev.fond + prev.ips) : null;
     const change = prevTotal !== null ? total - prevTotal : null;
     const changeStr = change !== null
       ? `<span style="color:${change >= 0 ? 'var(--green)' : 'var(--red)'}">

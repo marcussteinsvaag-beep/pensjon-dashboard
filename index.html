@@ -8,22 +8,22 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
   :root {
-    --bg: #080d18;
-    --surface: #0f1623;
-    --card: #141c2e;
-    --card2: #1a2338;
-    --border: #1e2d47;
-    --green: #10b981;
-    --green-dim: #064e3b;
-    --green-glow: rgba(16,185,129,0.15);
-    --amber: #f59e0b;
-    --red: #ef4444;
-    --blue: #3b82f6;
-    --text: #f0f4ff;
-    --muted: #8896b0;
-    --subtle: #2d3f5e;
+    --bg: #f0f4f8;
+    --surface: #ffffff;
+    --card: #ffffff;
+    --card2: #f8fafc;
+    --border: #e2e8f0;
+    --green: #059669;
+    --green-dim: #d1fae5;
+    --green-glow: rgba(5,150,105,0.1);
+    --amber: #d97706;
+    --red: #dc2626;
+    --blue: #2563eb;
+    --text: #0f172a;
+    --muted: #64748b;
+    --subtle: #cbd5e1;
     --apcoa: #7c3aed;
-    --apcoa-dim: #2e1065;
+    --apcoa-dim: #ede9fe;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -88,7 +88,7 @@
   /* HEADER */
   header {
     position: sticky; top: 0; z-index: 100;
-    background: rgba(8,13,24,0.92);
+    background: rgba(240,244,248,0.95);
     backdrop-filter: blur(16px);
     border-bottom: 1px solid var(--border);
     padding: 0.9rem 1.5rem;
@@ -117,7 +117,7 @@
   /* NAV */
   nav {
     position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
-    background: rgba(15,22,35,0.96);
+    background: rgba(255,255,255,0.97);
     backdrop-filter: blur(16px);
     border-top: 1px solid var(--border);
     display: flex;
@@ -150,12 +150,12 @@
   }
   .card.apcoa {
     border-color: var(--apcoa);
-    background: linear-gradient(135deg, var(--apcoa-dim) 0%, var(--card) 60%);
+    background: linear-gradient(135deg, #ede9fe 0%, #ffffff 60%);
   }
 
   /* HERO TOTAL */
   .hero {
-    background: linear-gradient(135deg, #0f1e35 0%, #0a1628 50%, #071320 100%);
+    background: linear-gradient(135deg, #e8f5f0 0%, #f0f7f4 50%, #f8fffe 100%);
     border: 1px solid var(--border);
     border-radius: 20px;
     padding: 1.75rem;
@@ -218,12 +218,12 @@
     display: flex; align-items: center; justify-content: center;
     font-size: 0.65rem; font-weight: 700; letter-spacing: 0.03em;
   }
-  .badge-ask { background: #1e3a5f; color: #60a5fa; }
-  .badge-af { background: #1e3a5f; color: #93c5fd; }
-  .badge-fond { background: #064e3b; color: #34d399; }
-  .badge-ips { background: #451a03; color: #fbbf24; }
-  .badge-apcoa1 { background: #2e1065; color: #a78bfa; }
-  .badge-apcoa2 { background: #2e1065; color: #c4b5fd; }
+  .badge-ask { background: #dbeafe; color: #1d4ed8; }
+  .badge-af { background: #dbeafe; color: #2563eb; }
+  .badge-fond { background: #d1fae5; color: #065f46; }
+  .badge-ips { background: #fef3c7; color: #92400e; }
+  .badge-apcoa1 { background: #ede9fe; color: #5b21b6; }
+  .badge-apcoa2 { background: #ede9fe; color: #6d28d9; }
   .account-name { font-size: 0.85rem; font-weight: 500; }
   .account-sub { font-size: 0.7rem; color: var(--muted); }
   .account-amount { font-size: 0.95rem; font-weight: 600; text-align: right; }
@@ -321,7 +321,7 @@
     border-radius: 8px; margin-bottom: 1rem;
   }
   .auth-status.connected { background: var(--green-dim); color: var(--green); }
-  .auth-status.disconnected { background: #1c1008; color: var(--amber); }
+  .auth-status.disconnected { background: #fef3c7; color: #92400e; }
 
   .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 
@@ -1101,11 +1101,11 @@ function renderProjectionChart(currentVal, monthly, annualRate, yearsLeft) {
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: '#141c2e',
-          borderColor: '#1e2d47',
+          backgroundColor: '#ffffff',
+          borderColor: '#e2e8f0',
           borderWidth: 1,
-          titleColor: '#8896b0',
-          bodyColor: '#f0f4ff',
+          titleColor: '#64748b',
+          bodyColor: '#0f172a',
           callbacks: {
             label: ctx => ctx.dataset.label + ': ' + formatAmount(ctx.parsed.y)
           }
@@ -1113,9 +1113,9 @@ function renderProjectionChart(currentVal, monthly, annualRate, yearsLeft) {
       },
       scales: {
         x: {
-          grid: { color: 'rgba(30,45,71,0.5)' },
+          grid: { color: 'rgba(226,232,240,0.8)' },
           ticks: {
-            color: '#6b7280', font: { size: 10 },
+            color: '#94a3b8', font: { size: 10 },
             maxTicksLimit: 8,
             callback: (val, idx, ticks) => {
               const yr = parseInt(labels[idx]);
@@ -1125,9 +1125,9 @@ function renderProjectionChart(currentVal, monthly, annualRate, yearsLeft) {
           }
         },
         y: {
-          grid: { color: 'rgba(30,45,71,0.5)' },
+          grid: { color: 'rgba(226,232,240,0.8)' },
           ticks: {
-            color: '#6b7280', font: { size: 10 },
+            color: '#94a3b8', font: { size: 10 },
             callback: v => v >= 1000000 ? (v/1000000).toFixed(1) + 'M' : (v/1000).toFixed(0) + 'k'
           }
         }

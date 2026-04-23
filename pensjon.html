@@ -1,0 +1,1256 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pensjonssparing</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #080d18;
+    --surface: #0f1623;
+    --card: #141c2e;
+    --card2: #1a2338;
+    --border: #1e2d47;
+    --green: #10b981;
+    --green-dim: #064e3b;
+    --green-glow: rgba(16,185,129,0.15);
+    --amber: #f59e0b;
+    --red: #ef4444;
+    --blue: #3b82f6;
+    --text: #f0f4ff;
+    --muted: #8896b0;
+    --subtle: #2d3f5e;
+    --apcoa: #7c3aed;
+    --apcoa-dim: #2e1065;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* PIN SCREEN */
+  #pin-screen {
+    position: fixed; inset: 0; z-index: 1000;
+    background: var(--bg);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 2rem;
+  }
+  .pin-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.8rem; color: var(--text);
+    text-align: center;
+  }
+  .pin-title span { color: var(--green); }
+  .pin-dots {
+    display: flex; gap: 1rem;
+  }
+  .pin-dot {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    border: 2px solid var(--subtle);
+    transition: all 0.2s;
+  }
+  .pin-dot.filled { background: var(--green); border-color: var(--green); }
+  .pin-pad {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 0.8rem; width: 280px;
+  }
+  .pin-btn {
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 1.4rem; font-weight: 500;
+    padding: 1.1rem;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .pin-btn:hover { background: var(--card2); border-color: var(--green); }
+  .pin-btn:active { transform: scale(0.95); }
+  .pin-btn.del { font-size: 1rem; color: var(--muted); }
+  .pin-error { color: var(--red); font-size: 0.85rem; height: 1.2em; }
+  .pin-setup-info { color: var(--muted); font-size: 0.85rem; text-align: center; max-width: 260px; }
+
+  /* APP SHELL */
+  #app { display: none; flex-direction: column; min-height: 100vh; }
+
+  /* HEADER */
+  header {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(8,13,24,0.92);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+    padding: 0.9rem 1.5rem;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .logo {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.1rem; font-weight: 600;
+    color: var(--text);
+  }
+  .logo span { color: var(--green); }
+  .header-actions { display: flex; gap: 0.5rem; }
+  .icon-btn {
+    background: var(--card); border: 1px solid var(--border);
+    color: var(--muted); padding: 0.5rem 0.75rem;
+    border-radius: 8px; cursor: pointer; font-size: 0.8rem;
+    transition: all 0.15s; white-space: nowrap;
+  }
+  .icon-btn:hover { color: var(--text); border-color: var(--subtle); }
+  .icon-btn.primary {
+    background: var(--green); color: #000;
+    border-color: var(--green); font-weight: 600;
+  }
+  .icon-btn.primary:hover { background: #0ea572; }
+
+  /* NAV */
+  nav {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+    background: rgba(15,22,35,0.96);
+    backdrop-filter: blur(16px);
+    border-top: 1px solid var(--border);
+    display: flex;
+    padding: 0.5rem 1rem;
+    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+  }
+  .nav-item {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; gap: 0.25rem;
+    padding: 0.5rem; cursor: pointer;
+    color: var(--muted); font-size: 0.7rem;
+    border-radius: 10px; transition: all 0.2s;
+    border: none; background: none;
+  }
+  .nav-item svg { width: 20px; height: 20px; }
+  .nav-item.active { color: var(--green); }
+  .nav-item:hover { color: var(--text); }
+
+  /* PAGES */
+  .page { display: none; padding: 1.5rem; padding-bottom: 5rem; }
+  .page.active { display: block; }
+
+  /* CARDS */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+  }
+  .card.apcoa {
+    border-color: var(--apcoa);
+    background: linear-gradient(135deg, var(--apcoa-dim) 0%, var(--card) 60%);
+  }
+
+  /* HERO TOTAL */
+  .hero {
+    background: linear-gradient(135deg, #0f1e35 0%, #0a1628 50%, #071320 100%);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 1.75rem;
+    margin-bottom: 1rem;
+    position: relative; overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute; top: -40px; right: -40px;
+    width: 160px; height: 160px;
+    background: var(--green-glow);
+    border-radius: 50%;
+    filter: blur(40px);
+  }
+  .hero-label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.4rem; }
+  .hero-amount {
+    font-family: 'Playfair Display', serif;
+    font-size: 2.4rem; font-weight: 700;
+    color: var(--text); line-height: 1;
+    margin-bottom: 0.3rem;
+  }
+  .hero-sub { font-size: 0.85rem; color: var(--muted); margin-bottom: 1.25rem; }
+
+  /* PROGRESS BAR */
+  .progress-wrap { margin-bottom: 0.5rem; }
+  .progress-labels { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--muted); margin-bottom: 0.4rem; }
+  .progress-track {
+    height: 8px; background: var(--subtle);
+    border-radius: 100px; overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%; border-radius: 100px;
+    background: linear-gradient(90deg, #059669, #10b981, #34d399);
+    transition: width 0.8s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  .progress-pct { font-size: 0.75rem; color: var(--green); margin-top: 0.3rem; text-align: right; }
+
+  /* GRID 2COL */
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem; }
+  .stat-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 1rem;
+  }
+  .stat-label { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.3rem; }
+  .stat-value { font-size: 1.2rem; font-weight: 600; color: var(--text); }
+  .stat-value.green { color: var(--green); }
+  .stat-value.amber { color: var(--amber); }
+  .stat-value.red { color: var(--red); }
+
+  /* KONTOER */
+  .account-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .account-row:last-child { border-bottom: none; }
+  .account-left { display: flex; align-items: center; gap: 0.75rem; }
+  .account-badge {
+    width: 36px; height: 36px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.65rem; font-weight: 700; letter-spacing: 0.03em;
+  }
+  .badge-ask { background: #1e3a5f; color: #60a5fa; }
+  .badge-af { background: #1e3a5f; color: #93c5fd; }
+  .badge-fond { background: #064e3b; color: #34d399; }
+  .badge-ips { background: #451a03; color: #fbbf24; }
+  .badge-apcoa1 { background: #2e1065; color: #a78bfa; }
+  .badge-apcoa2 { background: #2e1065; color: #c4b5fd; }
+  .account-name { font-size: 0.85rem; font-weight: 500; }
+  .account-sub { font-size: 0.7rem; color: var(--muted); }
+  .account-amount { font-size: 0.95rem; font-weight: 600; text-align: right; }
+
+  /* CHART */
+  .chart-wrap { position: relative; height: 220px; margin: 0.5rem 0; }
+
+  /* SECTION TITLE */
+  .section-title {
+    font-size: 0.7rem; text-transform: uppercase;
+    letter-spacing: 0.12em; color: var(--muted);
+    margin-bottom: 0.75rem; margin-top: 0.25rem;
+  }
+
+  /* FORM */
+  .form-group { margin-bottom: 1rem; }
+  .form-label { font-size: 0.78rem; color: var(--muted); margin-bottom: 0.4rem; display: block; }
+  .form-input {
+    width: 100%; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 10px;
+    color: var(--text); font-family: 'DM Sans', sans-serif;
+    font-size: 1rem; padding: 0.75rem 1rem;
+    outline: none; transition: border-color 0.2s;
+  }
+  .form-input:focus { border-color: var(--green); }
+  .form-input::placeholder { color: var(--muted); }
+  .form-section {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 1.1rem; margin-bottom: 1rem;
+  }
+  .form-section-title {
+    font-size: 0.8rem; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.08em;
+    margin-bottom: 0.9rem;
+  }
+  .form-section.apcoa-section { border-color: var(--apcoa); }
+  .form-section-title.purple { color: #a78bfa; }
+
+  .btn {
+    width: 100%; padding: 0.95rem;
+    border-radius: 12px; border: none;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 1rem; font-weight: 600;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .btn-primary { background: var(--green); color: #000; }
+  .btn-primary:hover { background: #0ea572; }
+  .btn-secondary { background: var(--card2); color: var(--text); border: 1px solid var(--border); }
+
+  /* HISTORY TABLE */
+  .history-row {
+    display: grid;
+    grid-template-columns: 3fr 2fr 2fr 2fr;
+    gap: 0.5rem;
+    padding: 0.7rem 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.82rem;
+  }
+  .history-row.header { color: var(--muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; }
+  .history-row:last-child { border-bottom: none; }
+  .txt-right { text-align: right; }
+
+  /* SETTINGS */
+  .setting-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.85rem 0; border-bottom: 1px solid var(--border);
+  }
+  .setting-row:last-child { border-bottom: none; }
+  .setting-label { font-size: 0.88rem; }
+  .setting-sub { font-size: 0.72rem; color: var(--muted); }
+  .setting-input {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text);
+    font-family: 'DM Sans', sans-serif; font-size: 0.9rem;
+    padding: 0.4rem 0.7rem; width: 110px; text-align: right; outline: none;
+  }
+  .setting-input:focus { border-color: var(--green); }
+
+  /* GOOGLE AUTH */
+  .google-btn {
+    display: flex; align-items: center; justify-content: center;
+    gap: 0.75rem; width: 100%;
+    background: #fff; color: #1f2937;
+    border: none; border-radius: 12px;
+    padding: 0.85rem; font-family: 'DM Sans', sans-serif;
+    font-size: 0.95rem; font-weight: 500; cursor: pointer;
+    transition: all 0.2s; margin-bottom: 1rem;
+  }
+  .google-btn:hover { background: #f3f4f6; }
+  .google-icon { width: 20px; height: 20px; }
+
+  .auth-status {
+    display: flex; align-items: center; gap: 0.5rem;
+    font-size: 0.82rem; padding: 0.6rem 0.9rem;
+    border-radius: 8px; margin-bottom: 1rem;
+  }
+  .auth-status.connected { background: var(--green-dim); color: var(--green); }
+  .auth-status.disconnected { background: #1c1008; color: var(--amber); }
+
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+
+  /* DIVIDER */
+  .divider { height: 1px; background: var(--border); margin: 1rem 0; }
+
+  /* YEAR MARKERS ON CHART */
+  .year-label { font-size: 0.7rem; }
+
+  /* ALERT */
+  .alert {
+    background: var(--card2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 0.75rem 1rem;
+    font-size: 0.82rem; color: var(--muted);
+    margin-bottom: 1rem;
+  }
+
+  /* ANIMATIONS */
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  .page.active { animation: fadeIn 0.3s ease; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--subtle); border-radius: 2px; }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- PIN SCREEN -->
+<div id="pin-screen">
+  <div>
+    <div class="pin-title">Pensjons<span>sparing</span></div>
+    <p style="text-align:center;color:var(--muted);font-size:0.82rem;margin-top:0.4rem" id="pin-subtitle">Skriv inn PIN</p>
+  </div>
+  <div class="pin-dots" id="pin-dots">
+    <div class="pin-dot" id="d0"></div>
+    <div class="pin-dot" id="d1"></div>
+    <div class="pin-dot" id="d2"></div>
+    <div class="pin-dot" id="d3"></div>
+  </div>
+  <div class="pin-error" id="pin-error"></div>
+  <div class="pin-pad">
+    <button class="pin-btn" onclick="pinInput('1')">1</button>
+    <button class="pin-btn" onclick="pinInput('2')">2</button>
+    <button class="pin-btn" onclick="pinInput('3')">3</button>
+    <button class="pin-btn" onclick="pinInput('4')">4</button>
+    <button class="pin-btn" onclick="pinInput('5')">5</button>
+    <button class="pin-btn" onclick="pinInput('6')">6</button>
+    <button class="pin-btn" onclick="pinInput('7')">7</button>
+    <button class="pin-btn" onclick="pinInput('8')">8</button>
+    <button class="pin-btn" onclick="pinInput('9')">9</button>
+    <button class="pin-btn" style="visibility:hidden"></button>
+    <button class="pin-btn" onclick="pinInput('0')">0</button>
+    <button class="pin-btn del" onclick="pinDel()">⌫</button>
+  </div>
+  <p class="pin-setup-info" id="pin-setup-info" style="display:none">Første gang: velg en 4-sifret PIN du vil bruke fremover.</p>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <header>
+    <div class="logo">Pensjons<span>sparing</span></div>
+    <div class="header-actions">
+      <button class="icon-btn" id="hide-btn" onclick="toggleHide()">👁 Skjul</button>
+      <button class="icon-btn primary" onclick="showPage('register')">+ Måned</button>
+    </div>
+  </header>
+
+  <!-- DASHBOARD -->
+  <div class="page active" id="page-dashboard">
+    <div class="hero">
+      <div class="hero-label">Privat pensjonssparing</div>
+      <div class="hero-amount" id="hero-total">— kr</div>
+      <div class="hero-sub" id="hero-date">Sist oppdatert: —</div>
+      <div class="progress-wrap">
+        <div class="progress-labels">
+          <span>I dag</span>
+          <span id="goal-label">Mål: 10 000 000 kr (2039)</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+        </div>
+        <div class="progress-pct" id="progress-pct">0% av mål</div>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="stat-card">
+        <div class="stat-label">Månedlig sparing</div>
+        <div class="stat-value green" id="stat-monthly">5 000 kr</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">År til mål</div>
+        <div class="stat-value" id="stat-years">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Avkastning p.a.</div>
+        <div class="stat-value" id="stat-return">5,75%</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Forventet 2039</div>
+        <div class="stat-value green" id="stat-projected">—</div>
+      </div>
+    </div>
+
+    <!-- FREMSKRIVNING GRAF -->
+    <div class="card">
+      <div class="section-title">Fremskrivning mot 2039</div>
+      <div class="chart-wrap">
+        <canvas id="projection-chart"></canvas>
+      </div>
+    </div>
+
+    <!-- PRIVAT KONTOER -->
+    <div class="card">
+      <div class="section-title">Privat sparing</div>
+      <div class="account-row">
+        <div class="account-left">
+          <div class="account-badge badge-ask">ASK</div>
+          <div><div class="account-name">Nordnet ASK</div><div class="account-sub">Enkeltaksjer</div></div>
+        </div>
+        <div class="account-amount" id="acc-ask">—</div>
+      </div>
+      <div class="account-row">
+        <div class="account-left">
+          <div class="account-badge badge-af">AF</div>
+          <div><div class="account-name">Nordnet AF</div><div class="account-sub">Aksje- og fondskonto</div></div>
+        </div>
+        <div class="account-amount" id="acc-af">—</div>
+      </div>
+      <div class="account-row">
+        <div class="account-left">
+          <div class="account-badge badge-fond">FOND</div>
+          <div><div class="account-name">DNB Fond</div><div class="account-sub">Fondskonto</div></div>
+        </div>
+        <div class="account-amount" id="acc-fond">—</div>
+      </div>
+      <div class="account-row">
+        <div class="account-left">
+          <div class="account-badge badge-ips">IPS</div>
+          <div><div class="account-name">DNB IPS</div><div class="account-sub">Individuell pensjonssparing</div></div>
+        </div>
+        <div class="account-amount" id="acc-ips">—</div>
+      </div>
+    </div>
+
+    <!-- APCOA -->
+    <div class="card apcoa">
+      <div class="section-title" style="color:#a78bfa">APCOA Pensjon <span style="font-size:0.65rem;background:#2e1065;padding:2px 8px;border-radius:100px;margin-left:4px">Arbeidsgiver</span></div>
+      <div class="account-row">
+        <div class="account-left">
+          <div class="account-badge badge-apcoa1">INS</div>
+          <div><div class="account-name">Innskuddspensjon</div><div class="account-sub">Pluss med investeringsvalg</div></div>
+        </div>
+        <div class="account-amount" id="acc-apcoa1" style="color:#a78bfa">—</div>
+      </div>
+      <div class="account-row">
+        <div class="account-left">
+          <div class="account-badge badge-apcoa2">FRI</div>
+          <div><div class="account-name">Pensjonskonto</div><div class="account-sub">Fripolise</div></div>
+        </div>
+        <div class="account-amount" id="acc-apcoa2" style="color:#a78bfa">—</div>
+      </div>
+      <div class="divider"></div>
+      <div style="display:flex;justify-content:space-between;font-size:0.88rem">
+        <span style="color:var(--muted)">Total APCOA</span>
+        <span style="font-weight:600;color:#a78bfa" id="acc-apcoa-total">—</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- REGISTER PAGE -->
+  <div class="page" id="page-register">
+    <h2 style="font-family:'Playfair Display',serif;font-size:1.4rem;margin-bottom:0.25rem">Registrer måned</h2>
+    <p style="color:var(--muted);font-size:0.85rem;margin-bottom:1.5rem">Oppdater beholdning per konto</p>
+
+    <div id="google-auth-section">
+      <div class="auth-status disconnected" id="auth-status-msg">
+        <div class="dot"></div>
+        <span id="auth-status-text">Ikke koblet til Google Sheets</span>
+      </div>
+      <button class="google-btn" id="google-signin-btn" onclick="handleGoogleAuth()">
+        <svg class="google-icon" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+        Koble til Google
+      </button>
+    </div>
+
+    <div class="form-section">
+      <div class="form-section-title">Dato</div>
+      <div class="form-group" style="margin-bottom:0">
+        <input type="month" class="form-input" id="reg-date">
+      </div>
+    </div>
+
+    <div class="form-section">
+      <div class="form-section-title">Månedlig sparing</div>
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">Sparebeløp denne måneden (kr)</label>
+        <input type="number" class="form-input" id="reg-saving" value="5000" placeholder="5000">
+      </div>
+    </div>
+
+    <div class="form-section">
+      <div class="form-section-title">🟦 Nordnet</div>
+      <div class="form-group">
+        <label class="form-label">ASK – Aksjesparekonto (kr)</label>
+        <input type="number" class="form-input" id="reg-ask" placeholder="984 612">
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">AF – Aksje- og fondskonto (kr)</label>
+        <input type="number" class="form-input" id="reg-af" placeholder="134 150">
+      </div>
+    </div>
+
+    <div class="form-section">
+      <div class="form-section-title">🟩 DNB</div>
+      <div class="form-group">
+        <label class="form-label">Fond – Fondskonto (kr)</label>
+        <input type="number" class="form-input" id="reg-fond" placeholder="2 162 843">
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">IPS – Individuell pensjonssparing (kr)</label>
+        <input type="number" class="form-input" id="reg-ips" placeholder="125 758">
+      </div>
+    </div>
+
+    <div class="form-section apcoa-section">
+      <div class="form-section-title purple">🟣 APCOA Pensjon</div>
+      <div class="form-group">
+        <label class="form-label">Innskuddspensjon med investeringsvalg (kr)</label>
+        <input type="number" class="form-input" id="reg-apcoa1" placeholder="980 342">
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">Pensjonskonto / Fripolise (kr)</label>
+        <input type="number" class="form-input" id="reg-apcoa2" placeholder="472 884">
+      </div>
+    </div>
+
+    <div class="alert" id="save-status" style="display:none"></div>
+
+    <button class="btn btn-primary" onclick="saveEntry()">Lagre måned</button>
+  </div>
+
+  <!-- HISTORY PAGE -->
+  <div class="page" id="page-history">
+    <h2 style="font-family:'Playfair Display',serif;font-size:1.4rem;margin-bottom:0.25rem">Historikk</h2>
+    <p style="color:var(--muted);font-size:0.85rem;margin-bottom:1.5rem">Alle registrerte måneder</p>
+
+    <div class="card" id="history-container">
+      <div class="history-row header">
+        <span>Dato</span>
+        <span class="txt-right">Privat total</span>
+        <span class="txt-right">Avkastn.</span>
+        <span class="txt-right">Sparing</span>
+      </div>
+      <div id="history-rows">
+        <p style="color:var(--muted);font-size:0.85rem;padding:1rem 0">Ingen data ennå</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- SETTINGS PAGE -->
+  <div class="page" id="page-settings">
+    <h2 style="font-family:'Playfair Display',serif;font-size:1.4rem;margin-bottom:0.25rem">Innstillinger</h2>
+    <p style="color:var(--muted);font-size:0.85rem;margin-bottom:1.5rem">Juster forutsetninger og konto</p>
+
+    <div class="card">
+      <div class="section-title">Google Sheets</div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Spreadsheet ID</div>
+          <div class="setting-sub">Lim inn ID fra Google Sheets URL</div>
+        </div>
+      </div>
+      <input type="text" class="form-input" id="sheet-id-input" placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms" style="margin-top:0.5rem;font-size:0.8rem">
+      <button class="btn btn-secondary" style="margin-top:0.75rem;padding:0.6rem" onclick="saveSheetId()">Lagre ID</button>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Forutsetninger</div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Avkastning per år</div>
+          <div class="setting-sub">Brukes i fremskrivning</div>
+        </div>
+        <input type="number" class="setting-input" id="setting-return" value="5.75" step="0.25" min="1" max="15">
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Månedlig sparing (default)</div>
+          <div class="setting-sub">Forhåndsutfylt ved registrering</div>
+        </div>
+        <input type="number" class="setting-input" id="setting-saving" value="5000" step="500">
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Nominelt mål (kr)</div>
+          <div class="setting-sub">Målbeløp i 2039</div>
+        </div>
+        <input type="number" class="setting-input" id="setting-goal" value="10000000" step="500000">
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Målår</div>
+          <div class="setting-sub">Når vil du nå målet?</div>
+        </div>
+        <input type="number" class="setting-input" id="setting-year" value="2039" step="1" min="2025" max="2060">
+      </div>
+      <button class="btn btn-primary" style="margin-top:0.75rem" onclick="saveSettings()">Lagre innstillinger</button>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Sikkerhet</div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Endre PIN</div>
+          <div class="setting-sub">Neste gang du åpner appen</div>
+        </div>
+        <button class="icon-btn" onclick="resetPin()">Tilbakestill</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Om appen</div>
+      <div class="alert" style="margin-bottom:0">
+        Data lagres i Google Sheets i din Google-konto. Appen lagrer ingenting lokalt unntatt innstillinger og PIN. Ingen tredjeparter har tilgang til dine data.
+      </div>
+    </div>
+  </div>
+
+  <!-- NAV -->
+  <nav>
+    <button class="nav-item active" id="nav-dashboard" onclick="showPage('dashboard')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      Oversikt
+    </button>
+    <button class="nav-item" id="nav-register" onclick="showPage('register')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+      Registrer
+    </button>
+    <button class="nav-item" id="nav-history" onclick="showPage('history')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      Historikk
+    </button>
+    <button class="nav-item" id="nav-settings" onclick="showPage('settings')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Innstillinger
+    </button>
+  </nav>
+</div>
+
+<script>
+// ============================================================
+// GOOGLE SHEETS API CONFIG
+// ============================================================
+// INSTRUCTIONS: 
+// 1. Go to console.cloud.google.com
+// 2. Create project, enable Sheets API + OAuth
+// 3. Create OAuth 2.0 Client ID (Web app)
+// 4. Add your GitHub Pages URL as authorized origin
+// 5. Replace CLIENT_ID below
+
+const CLIENT_ID = '739885431844-7181bsjjvnu8dvn83tiss9ait98qeahh.apps.googleusercontent.com';
+const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
+const DISCOVERY_DOC = 'https://sheets.googleapis.com/$discovery/rest?version=v4';
+
+let gapiReady = false;
+let tokenClient = null;
+let isSignedIn = false;
+let sheetsData = [];
+let projectionChart = null;
+let valuesHidden = false;
+
+// ============================================================
+// LOCAL SETTINGS (non-sensitive, OK in localStorage)
+// ============================================================
+let settings = {
+  returnRate: 5.75,
+  monthlySaving: 5000,
+  goal: 10000000,
+  goalYear: 2039,
+  sheetId: '10d-IpUwzTy5LSDSgNvQE6le9Zi_6QlHSYw1q-UuxsJk',
+  pin: ''
+};
+
+function loadSettings() {
+  const s = localStorage.getItem('ps_settings');
+  if (s) settings = { ...settings, ...JSON.parse(s) };
+}
+
+function saveSettingsLocal() {
+  localStorage.setItem('ps_settings', JSON.stringify(settings));
+}
+
+// ============================================================
+// PIN LOGIC
+// ============================================================
+let pinBuffer = '';
+let pinMode = 'check'; // 'check' | 'setup' | 'confirm'
+let pinFirst = '';
+
+function pinInput(digit) {
+  if (pinBuffer.length >= 4) return;
+  pinBuffer += digit;
+  updatePinDots();
+  if (pinBuffer.length === 4) {
+    setTimeout(() => processPIN(), 150);
+  }
+}
+
+function pinDel() {
+  pinBuffer = pinBuffer.slice(0, -1);
+  updatePinDots();
+}
+
+function updatePinDots() {
+  for (let i = 0; i < 4; i++) {
+    document.getElementById('d' + i).classList.toggle('filled', i < pinBuffer.length);
+  }
+}
+
+function processPIN() {
+  if (pinMode === 'check') {
+    if (pinBuffer === settings.pin) {
+      unlockApp();
+    } else {
+      document.getElementById('pin-error').textContent = 'Feil PIN, prøv igjen';
+      pinBuffer = ''; updatePinDots();
+      setTimeout(() => document.getElementById('pin-error').textContent = '', 2000);
+    }
+  } else if (pinMode === 'setup') {
+    pinFirst = pinBuffer;
+    pinBuffer = '';
+    updatePinDots();
+    pinMode = 'confirm';
+    document.getElementById('pin-subtitle').textContent = 'Bekreft PIN';
+  } else if (pinMode === 'confirm') {
+    if (pinBuffer === pinFirst) {
+      settings.pin = pinBuffer;
+      saveSettingsLocal();
+      unlockApp();
+    } else {
+      document.getElementById('pin-error').textContent = 'PIN stemmer ikke, prøv igjen';
+      pinBuffer = ''; pinFirst = ''; pinMode = 'setup';
+      updatePinDots();
+      document.getElementById('pin-subtitle').textContent = 'Velg en ny PIN';
+      setTimeout(() => document.getElementById('pin-error').textContent = '', 2000);
+    }
+  }
+}
+
+function unlockApp() {
+  document.getElementById('pin-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  document.getElementById('app').style.flexDirection = 'column';
+  initApp();
+}
+
+function resetPin() {
+  settings.pin = '';
+  saveSettingsLocal();
+  alert('PIN tilbakestilt. Sett ny PIN neste gang du åpner appen.');
+}
+
+// ============================================================
+// NAV
+// ============================================================
+function showPage(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  const nav = document.getElementById('nav-' + page);
+  if (nav) nav.classList.add('active');
+  if (page === 'history') renderHistory();
+}
+
+// ============================================================
+// GOOGLE API
+// ============================================================
+function loadGoogleAPI() {
+  // Load gapi
+  const script1 = document.createElement('script');
+  script1.src = 'https://apis.google.com/js/api.js';
+  script1.onload = () => {
+    gapi.load('client', async () => {
+      await gapi.client.init({ discoveryDocs: [DISCOVERY_DOC] });
+      gapiReady = true;
+      updateAuthUI();
+    });
+  };
+  document.body.appendChild(script1);
+
+  // Load GIS
+  const script2 = document.createElement('script');
+  script2.src = 'https://accounts.google.com/gsi/client';
+  script2.onload = () => {
+    if (CLIENT_ID === 'YOUR_GOOGLE_CLIENT_ID_HERE') return;
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: CLIENT_ID,
+      scope: SCOPES,
+      callback: (response) => {
+        if (response.error) return;
+        isSignedIn = true;
+        updateAuthUI();
+        loadSheetsData();
+      }
+    });
+  };
+  document.body.appendChild(script2);
+}
+
+function handleGoogleAuth() {
+  if (CLIENT_ID === 'YOUR_GOOGLE_CLIENT_ID_HERE') {
+    showSaveStatus('⚠️ Google Client ID ikke konfigurert. Se innstillinger for oppsett.', 'amber');
+    return;
+  }
+  if (!tokenClient) return;
+  tokenClient.requestAccessToken({ prompt: isSignedIn ? '' : 'consent' });
+}
+
+function updateAuthUI() {
+  const msg = document.getElementById('auth-status-msg');
+  const txt = document.getElementById('auth-status-text');
+  const btn = document.getElementById('google-signin-btn');
+  if (isSignedIn) {
+    msg.className = 'auth-status connected';
+    txt.textContent = 'Koblet til Google Sheets';
+    btn.textContent = '✓ Logget inn';
+    btn.style.background = '#d1fae5'; btn.style.color = '#065f46';
+  } else {
+    msg.className = 'auth-status disconnected';
+    txt.textContent = 'Ikke koblet til Google Sheets';
+  }
+}
+
+// ============================================================
+// SHEETS DATA
+// ============================================================
+async function loadSheetsData() {
+  if (!settings.sheetId || !isSignedIn || !gapiReady) return;
+  try {
+    const res = await gapi.client.sheets.spreadsheets.values.get({
+      spreadsheetId: settings.sheetId,
+      range: 'Historikk!A2:I1000'
+    });
+    const rows = res.result.values || [];
+    sheetsData = rows.map(r => ({
+      date: r[0] || '',
+      ask: parseFloat(r[1]) || 0,
+      af: parseFloat(r[2]) || 0,
+      fond: parseFloat(r[3]) || 0,
+      ips: parseFloat(r[4]) || 0,
+      apcoa1: parseFloat(r[5]) || 0,
+      apcoa2: parseFloat(r[6]) || 0,
+      saving: parseFloat(r[7]) || settings.monthlySaving,
+    }));
+    sheetsData.sort((a, b) => a.date.localeCompare(b.date));
+    updateDashboard();
+    renderHistory();
+  } catch(e) {
+    console.error('Sheets load error:', e);
+  }
+}
+
+async function saveEntry() {
+  const date = document.getElementById('reg-date').value;
+  const saving = parseFloat(document.getElementById('reg-saving').value) || settings.monthlySaving;
+  const ask = parseFloat(document.getElementById('reg-ask').value) || 0;
+  const af = parseFloat(document.getElementById('reg-af').value) || 0;
+  const fond = parseFloat(document.getElementById('reg-fond').value) || 0;
+  const ips = parseFloat(document.getElementById('reg-ips').value) || 0;
+  const apcoa1 = parseFloat(document.getElementById('reg-apcoa1').value) || 0;
+  const apcoa2 = parseFloat(document.getElementById('reg-apcoa2').value) || 0;
+
+  if (!date) { showSaveStatus('Velg dato først', 'amber'); return; }
+  if (!ask && !af && !fond && !ips) { showSaveStatus('Fyll inn minst én konto', 'amber'); return; }
+
+  const newRow = [date, ask, af, fond, ips, apcoa1, apcoa2, saving];
+
+  if (!isSignedIn || !settings.sheetId) {
+    // Offline mode - store in memory
+    sheetsData = sheetsData.filter(r => r.date !== date);
+    sheetsData.push({ date, ask, af, fond, ips, apcoa1, apcoa2, saving });
+    sheetsData.sort((a, b) => a.date.localeCompare(b.date));
+    showSaveStatus('✓ Lagret lokalt (koble til Google for sky-lagring)', 'green');
+    updateDashboard();
+    return;
+  }
+
+  try {
+    // Check if row for this month already exists
+    const existing = sheetsData.findIndex(r => r.date === date);
+    if (existing >= 0) {
+      // Update existing row
+      const rowNum = existing + 2;
+      await gapi.client.sheets.spreadsheets.values.update({
+        spreadsheetId: settings.sheetId,
+        range: `Historikk!A${rowNum}:H${rowNum}`,
+        valueInputOption: 'RAW',
+        resource: { values: [newRow] }
+      });
+    } else {
+      // Append new row
+      await gapi.client.sheets.spreadsheets.values.append({
+        spreadsheetId: settings.sheetId,
+        range: 'Historikk!A:H',
+        valueInputOption: 'RAW',
+        resource: { values: [newRow] }
+      });
+    }
+    showSaveStatus('✓ Lagret i Google Sheets', 'green');
+    await loadSheetsData();
+    setTimeout(() => showPage('dashboard'), 1500);
+  } catch(e) {
+    showSaveStatus('Feil ved lagring: ' + e.message, 'red');
+  }
+}
+
+function showSaveStatus(msg, type) {
+  const el = document.getElementById('save-status');
+  el.textContent = msg;
+  el.style.display = 'block';
+  el.style.color = type === 'green' ? 'var(--green)' : type === 'amber' ? 'var(--amber)' : 'var(--red)';
+  setTimeout(() => el.style.display = 'none', 4000);
+}
+
+// ============================================================
+// DASHBOARD UPDATE
+// ============================================================
+function updateDashboard() {
+  if (sheetsData.length === 0) {
+    // Use seed data from screenshots
+    sheetsData = [{
+      date: '2025-04',
+      ask: 984612, af: 134150, fond: 2162843, ips: 125758,
+      apcoa1: 980342, apcoa2: 472884, saving: 5000
+    }];
+  }
+
+  const latest = sheetsData[sheetsData.length - 1];
+  const privateTotal = latest.ask + latest.af + latest.fond + latest.ips;
+  const apcoaTotal = latest.apcoa1 + latest.apcoa2;
+
+  // Hero
+  document.getElementById('hero-total').textContent = formatAmount(privateTotal);
+  document.getElementById('hero-date').textContent = 'Sist oppdatert: ' + formatDate(latest.date);
+
+  // Progress
+  const pct = Math.min((privateTotal / settings.goal) * 100, 100);
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('progress-pct').textContent = pct.toFixed(1) + '% av mål';
+  document.getElementById('goal-label').textContent = `Mål: ${formatAmount(settings.goal)} (${settings.goalYear})`;
+
+  // Stats
+  document.getElementById('stat-monthly').textContent = formatAmount(latest.saving);
+  const yearsLeft = settings.goalYear - new Date().getFullYear();
+  document.getElementById('stat-years').textContent = yearsLeft + ' år';
+  document.getElementById('stat-return').textContent = settings.returnRate.toFixed(2) + '%';
+
+  // Projected value
+  const projected = projectValue(privateTotal, latest.saving, settings.returnRate / 100, yearsLeft);
+  const projectedEl = document.getElementById('stat-projected');
+  projectedEl.textContent = formatAmount(Math.round(projected));
+  projectedEl.className = 'stat-value ' + (projected >= settings.goal ? 'green' : 'amber');
+
+  // Accounts
+  document.getElementById('acc-ask').textContent = formatAmount(latest.ask);
+  document.getElementById('acc-af').textContent = formatAmount(latest.af);
+  document.getElementById('acc-fond').textContent = formatAmount(latest.fond);
+  document.getElementById('acc-ips').textContent = formatAmount(latest.ips);
+  document.getElementById('acc-apcoa1').textContent = formatAmount(latest.apcoa1);
+  document.getElementById('acc-apcoa2').textContent = formatAmount(latest.apcoa2);
+  document.getElementById('acc-apcoa-total').textContent = formatAmount(apcoaTotal);
+
+  // Chart
+  renderProjectionChart(privateTotal, latest.saving, settings.returnRate / 100, yearsLeft);
+}
+
+function projectValue(current, monthly, annualRate, years) {
+  const monthlyRate = annualRate / 12;
+  let val = current;
+  for (let m = 0; m < years * 12; m++) {
+    val = val * (1 + monthlyRate) + monthly;
+  }
+  return val;
+}
+
+function renderProjectionChart(currentVal, monthly, annualRate, yearsLeft) {
+  const ctx = document.getElementById('projection-chart').getContext('2d');
+  if (projectionChart) projectionChart.destroy();
+
+  const labels = [];
+  const actualData = [];
+  const projData = [];
+  const goalLine = [];
+  const currentYear = new Date().getFullYear();
+
+  // Historical data points (yearly)
+  const yearlyData = {};
+  sheetsData.forEach(r => {
+    const yr = r.date.substring(0, 4);
+    yearlyData[yr] = r.ask + r.af + r.fond + r.ips;
+  });
+
+  // Build chart data: historical + projection
+  const startYear = parseInt(Object.keys(yearlyData)[0]) || currentYear;
+  const endYear = settings.goalYear;
+
+  for (let y = startYear; y <= endYear; y++) {
+    labels.push(y.toString());
+    goalLine.push(settings.goal);
+    if (yearlyData[y] !== undefined) {
+      actualData.push(yearlyData[y]);
+      projData.push(null);
+    } else {
+      actualData.push(null);
+      // Project from current
+      const yearsFromNow = y - currentYear;
+      if (yearsFromNow >= 0) {
+        projData.push(Math.round(projectValue(currentVal, monthly, annualRate, yearsFromNow)));
+      } else {
+        projData.push(null);
+      }
+    }
+  }
+  // Connect historical to projection
+  const lastActualIdx = actualData.reduce((acc, v, i) => v !== null ? i : acc, -1);
+  if (lastActualIdx >= 0 && lastActualIdx < projData.length - 1) {
+    projData[lastActualIdx] = actualData[lastActualIdx];
+  }
+
+  projectionChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Faktisk',
+          data: actualData,
+          borderColor: '#10b981',
+          backgroundColor: 'rgba(16,185,129,0.08)',
+          borderWidth: 2.5,
+          pointRadius: 3,
+          pointBackgroundColor: '#10b981',
+          tension: 0.3,
+          fill: false,
+          spanGaps: false,
+        },
+        {
+          label: 'Prognose',
+          data: projData,
+          borderColor: '#10b981',
+          borderDash: [5, 5],
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.3,
+          fill: {target: 'origin', above: 'rgba(16,185,129,0.04)'},
+          spanGaps: false,
+        },
+        {
+          label: 'Mål',
+          data: goalLine,
+          borderColor: 'rgba(245,158,11,0.5)',
+          borderWidth: 1.5,
+          borderDash: [3, 5],
+          pointRadius: 0,
+          fill: false,
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#141c2e',
+          borderColor: '#1e2d47',
+          borderWidth: 1,
+          titleColor: '#8896b0',
+          bodyColor: '#f0f4ff',
+          callbacks: {
+            label: ctx => ctx.dataset.label + ': ' + formatAmount(ctx.parsed.y)
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(30,45,71,0.5)' },
+          ticks: {
+            color: '#6b7280', font: { size: 10 },
+            maxTicksLimit: 8,
+            callback: (val, idx, ticks) => {
+              const yr = parseInt(labels[idx]);
+              if ([currentYear, settings.goalYear, currentYear + 5, currentYear + 10].includes(yr)) return yr;
+              return '';
+            }
+          }
+        },
+        y: {
+          grid: { color: 'rgba(30,45,71,0.5)' },
+          ticks: {
+            color: '#6b7280', font: { size: 10 },
+            callback: v => v >= 1000000 ? (v/1000000).toFixed(1) + 'M' : (v/1000).toFixed(0) + 'k'
+          }
+        }
+      }
+    }
+  });
+}
+
+// ============================================================
+// HISTORY
+// ============================================================
+function renderHistory() {
+  const container = document.getElementById('history-rows');
+  if (sheetsData.length === 0) {
+    container.innerHTML = '<p style="color:var(--muted);font-size:0.85rem;padding:1rem 0">Ingen data ennå</p>';
+    return;
+  }
+
+  const sorted = [...sheetsData].reverse();
+  container.innerHTML = sorted.map((r, i) => {
+    const total = r.ask + r.af + r.fond + r.ips;
+    const prev = sorted[i + 1];
+    const prevTotal = prev ? (prev.ask + prev.af + prev.fond + prev.ips) : null;
+    const change = prevTotal !== null ? total - prevTotal : null;
+    const changeStr = change !== null
+      ? `<span style="color:${change >= 0 ? 'var(--green)' : 'var(--red)'}">
+          ${change >= 0 ? '+' : ''}${formatAmount(change)}
+         </span>`
+      : '<span style="color:var(--muted)">—</span>';
+
+    return `<div class="history-row">
+      <span>${formatDate(r.date)}</span>
+      <span class="txt-right">${formatAmount(total)}</span>
+      <span class="txt-right">${changeStr}</span>
+      <span class="txt-right" style="color:var(--muted)">${formatAmount(r.saving)}</span>
+    </div>`;
+  }).join('');
+}
+
+// ============================================================
+// SETTINGS SAVE
+// ============================================================
+function saveSettings() {
+  settings.returnRate = parseFloat(document.getElementById('setting-return').value) || 5.75;
+  settings.monthlySaving = parseFloat(document.getElementById('setting-saving').value) || 5000;
+  settings.goal = parseFloat(document.getElementById('setting-goal').value) || 10000000;
+  settings.goalYear = parseInt(document.getElementById('setting-year').value) || 2039;
+  saveSettingsLocal();
+  updateDashboard();
+  alert('Innstillinger lagret ✓');
+}
+
+function saveSheetId() {
+  settings.sheetId = document.getElementById('sheet-id-input').value.trim();
+  saveSettingsLocal();
+  if (isSignedIn) loadSheetsData();
+  alert('Sheet ID lagret ✓');
+}
+
+// ============================================================
+// HIDE/SHOW VALUES
+// ============================================================
+function toggleHide() {
+  valuesHidden = !valuesHidden;
+  document.getElementById('hide-btn').textContent = valuesHidden ? '👁 Vis' : '👁 Skjul';
+  const amounts = document.querySelectorAll('.hero-amount, .account-amount, .stat-value');
+  amounts.forEach(el => {
+    if (valuesHidden) {
+      if (!el.dataset.orig) el.dataset.orig = el.textContent;
+      el.textContent = '••••••';
+    } else {
+      if (el.dataset.orig) el.textContent = el.dataset.orig;
+    }
+  });
+}
+
+// ============================================================
+// UTILS
+// ============================================================
+function formatAmount(n) {
+  if (!n && n !== 0) return '—';
+  return Math.round(n).toLocaleString('nb-NO') + ' kr';
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '—';
+  const [y, m] = dateStr.split('-');
+  const months = ['jan','feb','mar','apr','mai','jun','jul','aug','sep','okt','nov','des'];
+  return `${months[parseInt(m) - 1]} ${y}`;
+}
+
+// ============================================================
+// INIT
+// ============================================================
+function initApp() {
+  // Load settings into UI
+  document.getElementById('setting-return').value = settings.returnRate;
+  document.getElementById('setting-saving').value = settings.monthlySaving;
+  document.getElementById('setting-goal').value = settings.goal;
+  document.getElementById('setting-year').value = settings.goalYear;
+  document.getElementById('sheet-id-input').value = settings.sheetId || '';
+  document.getElementById('reg-saving').value = settings.monthlySaving;
+
+  // Set today's month as default
+  const now = new Date();
+  document.getElementById('reg-date').value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+
+  loadGoogleAPI();
+  updateDashboard();
+}
+
+// ============================================================
+// STARTUP
+// ============================================================
+loadSettings();
+
+if (!settings.pin) {
+  pinMode = 'setup';
+  document.getElementById('pin-subtitle').textContent = 'Velg en 4-sifret PIN';
+  document.getElementById('pin-setup-info').style.display = 'block';
+} else {
+  document.getElementById('pin-subtitle').textContent = 'Skriv inn PIN';
+}
+</script>
+</body>
+</html>

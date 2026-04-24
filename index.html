@@ -417,7 +417,7 @@
         <div class="stat-value green" id="stat-monthly">5 000 kr</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Forventet 2039</div>
+        <div class="stat-label" id="stat-projected-label">Forventet 2039</div>
         <div class="stat-value green" id="stat-projected">—</div>
       </div>
       <div class="stat-card">
@@ -1018,6 +1018,7 @@ function updateDashboard() {
   const yearsLeft = settings.goalYear - new Date().getFullYear();
   document.getElementById('stat-years').textContent = yearsLeft + ' år';
   document.getElementById('stat-return').textContent = settings.returnRate.toFixed(2) + '%';
+  document.getElementById('stat-projected-label').textContent = 'Forventet ' + settings.goalYear;
 
   // Projected value
   const projected = projectValue(privateTotal, settings.monthlySaving, settings.returnRate / 100, yearsLeft);

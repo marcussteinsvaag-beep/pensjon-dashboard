@@ -2,8 +2,15 @@
 <html lang="no">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Pensjonssparing</title>
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Pensjon">
+<meta name="theme-color" content="#f0f4f8">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.png">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
@@ -841,22 +848,21 @@ function showPage(page) {
 }
 
 // ============================================================
-// GOOGLE API
+// GOOGLE API - with auto-reconnect and token caching
 // ============================================================
 function loadGoogleAPI() {
-  // Load gapi
   const script1 = document.createElement('script');
   script1.src = 'https://apis.google.com/js/api.js';
   script1.onload = () => {
     gapi.load('client', async () => {
       await gapi.client.init({ discoveryDocs: [DISCOVERY_DOC] });
       gapiReady = true;
-      updateAuthUI();
+      // Try silent sign-in with cached token
+      trySilentSignIn();
     });
   };
   document.body.appendChild(script1);
 
-  // Load GIS
   const script2 = document.createElement('script');
   script2.src = 'https://accounts.google.com/gsi/client';
   script2.onload = () => {
@@ -865,23 +871,55 @@ function loadGoogleAPI() {
       client_id: CLIENT_ID,
       scope: SCOPES,
       callback: (response) => {
-        if (response.error) return;
+        if (response.error) {
+          console.error('Token error:', response.error);
+          isSignedIn = false;
+          updateAuthUI();
+          return;
+        }
+        // Cache token info
+        const expiry = Date.now() + (response.expires_in * 1000) - 60000; // 1 min buffer
+        localStorage.setItem('ps_token', response.access_token);
+        localStorage.setItem('ps_token_expiry', expiry.toString());
+        gapi.client.setToken({ access_token: response.access_token });
         isSignedIn = true;
         updateAuthUI();
         loadSheetsData();
       }
     });
+    // Try silent after GIS loads too
+    if (gapiReady) trySilentSignIn();
   };
   document.body.appendChild(script2);
 }
 
+function trySilentSignIn() {
+  const token = localStorage.getItem('ps_token');
+  const expiry = parseInt(localStorage.getItem('ps_token_expiry') || '0');
+  
+  if (token && Date.now() < expiry) {
+    // Token still valid - use it directly
+    gapi.client.setToken({ access_token: token });
+    isSignedIn = true;
+    updateAuthUI();
+    loadSheetsData();
+    return;
+  }
+  
+  // Token expired or missing - try silent refresh (no prompt)
+  if (tokenClient && CLIENT_ID !== 'YOUR_GOOGLE_CLIENT_ID_HERE') {
+    tokenClient.requestAccessToken({ prompt: '' });
+  }
+}
+
 function handleGoogleAuth() {
   if (CLIENT_ID === 'YOUR_GOOGLE_CLIENT_ID_HERE') {
-    showSaveStatus('⚠️ Google Client ID ikke konfigurert. Se innstillinger for oppsett.', 'amber');
+    showSaveStatus('⚠️ Google Client ID ikke konfigurert.', 'amber');
     return;
   }
   if (!tokenClient) return;
-  tokenClient.requestAccessToken({ prompt: isSignedIn ? '' : 'consent' });
+  // Force consent screen only on manual click
+  tokenClient.requestAccessToken({ prompt: 'select_account' });
 }
 
 function updateAuthUI() {
@@ -1403,6 +1441,15 @@ function initApp() {
 
   loadGoogleAPI();
   updateDashboard();
+}
+
+// ============================================================
+// PWA SERVICE WORKER
+// ============================================================
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
 }
 
 // ============================================================

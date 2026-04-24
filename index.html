@@ -413,20 +413,39 @@
 
     <div class="grid2">
       <div class="stat-card">
-        <div class="stat-label">Månedlig sparing</div>
+        <div class="stat-label">Månedlig sparemål</div>
         <div class="stat-value green" id="stat-monthly">5 000 kr</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Forventet 2039</div>
+        <div class="stat-value green" id="stat-projected">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Spart så langt i år</div>
+        <div class="stat-value" id="stat-saved-year">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Innskutt siden mars 2015</div>
+        <div class="stat-value" id="stat-saved-total">—</div>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="stat-card">
+        <div class="stat-label">Avkastning i år</div>
+        <div class="stat-value" id="stat-return-year">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Årlig snitt siden start</div>
+        <div class="stat-value" id="stat-return-annualized">—</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">År til mål</div>
         <div class="stat-value" id="stat-years">—</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Avkastning p.a.</div>
+        <div class="stat-label">Forutsatt avkastning</div>
         <div class="stat-value" id="stat-return">5,75%</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Forventet 2039</div>
-        <div class="stat-value green" id="stat-projected">—</div>
       </div>
     </div>
 
@@ -995,16 +1014,66 @@ function updateDashboard() {
   document.getElementById('goal-label').textContent = `Mål: ${formatAmount(settings.goal)} (${settings.goalYear})`;
 
   // Stats
-  document.getElementById('stat-monthly').textContent = formatAmount(latest.saving);
+  document.getElementById('stat-monthly').textContent = formatAmount(settings.monthlySaving);
   const yearsLeft = settings.goalYear - new Date().getFullYear();
   document.getElementById('stat-years').textContent = yearsLeft + ' år';
   document.getElementById('stat-return').textContent = settings.returnRate.toFixed(2) + '%';
 
   // Projected value
-  const projected = projectValue(privateTotal, latest.saving, settings.returnRate / 100, yearsLeft);
+  const projected = projectValue(privateTotal, settings.monthlySaving, settings.returnRate / 100, yearsLeft);
   const projectedEl = document.getElementById('stat-projected');
   projectedEl.textContent = formatAmount(Math.round(projected));
   projectedEl.className = 'stat-value ' + (projected >= settings.goal ? 'green' : 'amber');
+
+  // Spart så langt i år
+  const currentYear = new Date().getFullYear().toString();
+  const thisYearRows = sheetsData.filter(r => r.date.startsWith(currentYear));
+  const savedThisYear = thisYearRows.reduce((sum, r) => sum + r.saving, 0);
+  document.getElementById('stat-saved-year').textContent = formatAmount(savedThisYear);
+
+  // Innskutt kapital siden oppstart (sum av sparing-kolonnen)
+  const totalDeposited = sheetsData.reduce((sum, r) => sum + (r.saving || 0), 0);
+  const depositEl = document.getElementById('stat-saved-total');
+  depositEl.textContent = formatAmount(totalDeposited);
+  depositEl.className = 'stat-value';
+
+  // Avkastning i år (%)
+  const firstThisYear = thisYearRows.length > 0 ? thisYearRows[0] : null;
+  const prevYearRows = sheetsData.filter(r => r.date.startsWith((parseInt(currentYear) - 1).toString()));
+  const lastPrevYear = prevYearRows.length > 0 ? prevYearRows[prevYearRows.length - 1] : null;
+
+  const returnYearEl = document.getElementById('stat-return-year');
+  if (firstThisYear && lastPrevYear) {
+    const startVal = lastPrevYear.totalOverride > 0 ? lastPrevYear.totalOverride : lastPrevYear.ask + lastPrevYear.af + lastPrevYear.fond + lastPrevYear.ips;
+    const endVal = privateTotal;
+    const netSaving = thisYearRows.reduce((sum, r) => sum + r.saving, 0);
+    const returnPct = startVal > 0 ? ((endVal - startVal - netSaving) / startVal) * 100 : 0;
+    returnYearEl.textContent = (returnPct >= 0 ? '+' : '') + returnPct.toFixed(1) + '%';
+    returnYearEl.className = 'stat-value ' + (returnPct >= 0 ? 'green' : 'red');
+  } else {
+    returnYearEl.textContent = '—';
+    returnYearEl.className = 'stat-value';
+  }
+
+  // Annualisert avkastning siden start (CAGR)
+  const returnAnnEl = document.getElementById('stat-return-annualized');
+  if (sheetsData.length > 1) {
+    const first = sheetsData[0];
+    const firstVal = first.totalOverride > 0 ? first.totalOverride : first.ask + first.af + first.fond + first.ips;
+    const firstDate = new Date(first.date + '-01');
+    const lastDate = new Date(latest.date + '-01');
+    const yearsElapsed = (lastDate - firstDate) / (1000 * 60 * 60 * 24 * 365.25);
+    const totalSaved = sheetsData.reduce((sum, r) => sum + (r.saving || 0), 0);
+    // Simple CAGR approximation: treat avg invested as (start + end) / 2
+    const avgInvested = (firstVal + privateTotal) / 2;
+    const gain = privateTotal - firstVal - totalSaved;
+    const annReturn = avgInvested > 0 && yearsElapsed > 0 ? (gain / avgInvested / yearsElapsed) * 100 : 0;
+    returnAnnEl.textContent = (annReturn >= 0 ? '+' : '') + annReturn.toFixed(1) + '% p.a.';
+    returnAnnEl.className = 'stat-value ' + (annReturn >= 0 ? 'green' : 'red');
+  } else {
+    returnAnnEl.textContent = '—';
+    returnAnnEl.className = 'stat-value';
+  }
 
   // Accounts
   document.getElementById('acc-ask').textContent = formatAmount(latest.ask);

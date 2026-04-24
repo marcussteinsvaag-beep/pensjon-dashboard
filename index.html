@@ -451,10 +451,14 @@
 
     <!-- FREMSKRIVNING GRAF -->
     <div class="card">
-      <div class="section-title">Fremskrivning mot 2039</div>
-      <div class="chart-wrap">
+      <div class="section-title" id="chart-title">Fremskrivning mot 2039</div>
+      <div class="chart-wrap" style="height:240px">
         <canvas id="projection-chart"></canvas>
       </div>
+      <p style="font-size:0.7rem;color:var(--muted);margin-top:0.75rem;line-height:1.5">
+        Inkluderer 25 000 kr/år IPS og <span id="kpi-note">2,5%</span> årlig KPI-opptrapping av sparebeløp.
+        Realistisk scenario basert på <span id="rate-note">5,75%</span> p.a. avkastning.
+      </p>
     </div>
 
     <!-- PRIVAT KONTOER -->
@@ -652,6 +656,20 @@
         </div>
         <input type="number" class="setting-input" id="setting-year" value="2039" step="1" min="2025" max="2060">
       </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">IPS årlig innbetaling</div>
+          <div class="setting-sub">Legges til i prognoseberegningen</div>
+        </div>
+        <input type="number" class="setting-input" id="setting-ips" value="25000" step="1000">
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">KPI-opptrapping sparing</div>
+          <div class="setting-sub">Årlig økning i sparebeløp (%)</div>
+        </div>
+        <input type="number" class="setting-input" id="setting-kpi" value="2.5" step="0.5" min="0" max="10">
+      </div>
       <button class="btn btn-primary" style="margin-top:0.75rem" onclick="saveSettings()">Lagre innstillinger</button>
     </div>
 
@@ -723,6 +741,8 @@ let valuesHidden = false;
 let settings = {
   returnRate: 5.75,
   monthlySaving: 5000,
+  ipsAnnual: 25000,
+  kpiRate: 2.5,
   goal: 10000000,
   goalYear: 2039,
   sheetId: '10d-IpUwzTy5LSDSgNvQE6le9Zi_6QlHSYw1q-UuxsJk',
@@ -1019,9 +1039,15 @@ function updateDashboard() {
   document.getElementById('stat-years').textContent = yearsLeft + ' år';
   document.getElementById('stat-return').textContent = settings.returnRate.toFixed(2) + '%';
   document.getElementById('stat-projected-label').textContent = 'Forventet ' + settings.goalYear;
+  const chartTitle = document.getElementById('chart-title');
+  if (chartTitle) chartTitle.textContent = 'Fremskrivning mot ' + settings.goalYear;
+  const kpiNote = document.getElementById('kpi-note');
+  if (kpiNote) kpiNote.textContent = (settings.kpiRate || 2.5) + '%';
+  const rateNote = document.getElementById('rate-note');
+  if (rateNote) rateNote.textContent = (settings.returnRate || 5.75) + '%';
 
   // Projected value
-  const projected = projectValue(privateTotal, settings.monthlySaving, settings.returnRate / 100, yearsLeft);
+  const projected = projectValue(privateTotal, settings.monthlySaving, settings.returnRate / 100, yearsLeft, settings.kpiRate || 2.5, settings.ipsAnnual || 25000);
   const projectedEl = document.getElementById('stat-projected');
   projectedEl.textContent = formatAmount(Math.round(projected));
   projectedEl.className = 'stat-value ' + (projected >= settings.goal ? 'green' : 'amber');
@@ -1086,29 +1112,37 @@ function updateDashboard() {
   document.getElementById('acc-apcoa-total').textContent = formatAmount(apcoaTotal);
 
   // Chart
-  renderProjectionChart(privateTotal, latest.saving, settings.returnRate / 100, yearsLeft);
+  renderProjectionChart(privateTotal, settings.monthlySaving, settings.returnRate / 100, yearsLeft, settings.kpiRate || 2.5, settings.ipsAnnual || 25000);
 }
 
-function projectValue(current, monthly, annualRate, years) {
+function projectValue(current, monthly, annualRate, years, kpiRate = 0, ipsAnnual = 0) {
   const monthlyRate = annualRate / 12;
+  const monthlyIPS = ipsAnnual / 12;
   let val = current;
+  let currentMonthly = monthly + monthlyIPS;
   for (let m = 0; m < years * 12; m++) {
-    val = val * (1 + monthlyRate) + monthly;
+    // Apply KPI increase at start of each year
+    if (m > 0 && m % 12 === 0) {
+      currentMonthly *= (1 + kpiRate / 100);
+    }
+    val = val * (1 + monthlyRate) + currentMonthly;
   }
   return val;
 }
 
-function renderProjectionChart(currentVal, monthly, annualRate, yearsLeft) {
+function renderProjectionChart(currentVal, monthly, annualRate, yearsLeft, kpiRate = 0, ipsAnnual = 0) {
   const ctx = document.getElementById('projection-chart').getContext('2d');
   if (projectionChart) projectionChart.destroy();
 
   const labels = [];
   const actualData = [];
-  const projData = [];
+  const projRealistic = [];
+  const projPessimistic = [];
+  const projOptimistic = [];
   const goalLine = [];
   const currentYear = new Date().getFullYear();
 
-  // Historical data points (yearly - use totalOverride for legacy rows)
+  // Historical data points (yearly)
   const yearlyData = {};
   sheetsData.forEach(r => {
     const yr = r.date.substring(0, 4);
@@ -1116,31 +1150,40 @@ function renderProjectionChart(currentVal, monthly, annualRate, yearsLeft) {
     if (total > 0) yearlyData[yr] = total;
   });
 
-  // Build chart data: historical + projection
   const startYear = parseInt(Object.keys(yearlyData)[0]) || currentYear;
   const endYear = settings.goalYear;
+
+  const rates = { pessimistic: 0.04, realistic: annualRate, optimistic: 0.08 };
 
   for (let y = startYear; y <= endYear; y++) {
     labels.push(y.toString());
     goalLine.push(settings.goal);
     if (yearlyData[y] !== undefined) {
       actualData.push(yearlyData[y]);
-      projData.push(null);
+      projRealistic.push(null);
+      projPessimistic.push(null);
+      projOptimistic.push(null);
     } else {
       actualData.push(null);
-      // Project from current
       const yearsFromNow = y - currentYear;
       if (yearsFromNow >= 0) {
-        projData.push(Math.round(projectValue(currentVal, monthly, annualRate, yearsFromNow)));
+        projRealistic.push(Math.round(projectValue(currentVal, monthly, rates.realistic, yearsFromNow, kpiRate, ipsAnnual)));
+        projPessimistic.push(Math.round(projectValue(currentVal, monthly, rates.pessimistic, yearsFromNow, kpiRate, ipsAnnual)));
+        projOptimistic.push(Math.round(projectValue(currentVal, monthly, rates.optimistic, yearsFromNow, kpiRate, ipsAnnual)));
       } else {
-        projData.push(null);
+        projRealistic.push(null);
+        projPessimistic.push(null);
+        projOptimistic.push(null);
       }
     }
   }
+
   // Connect historical to projection
   const lastActualIdx = actualData.reduce((acc, v, i) => v !== null ? i : acc, -1);
-  if (lastActualIdx >= 0 && lastActualIdx < projData.length - 1) {
-    projData[lastActualIdx] = actualData[lastActualIdx];
+  if (lastActualIdx >= 0) {
+    projRealistic[lastActualIdx] = actualData[lastActualIdx];
+    projPessimistic[lastActualIdx] = actualData[lastActualIdx];
+    projOptimistic[lastActualIdx] = actualData[lastActualIdx];
   }
 
   projectionChart = new Chart(ctx, {
@@ -1151,30 +1194,51 @@ function renderProjectionChart(currentVal, monthly, annualRate, yearsLeft) {
         {
           label: 'Faktisk',
           data: actualData,
-          borderColor: '#10b981',
-          backgroundColor: 'rgba(16,185,129,0.08)',
+          borderColor: '#059669',
           borderWidth: 2.5,
           pointRadius: 3,
-          pointBackgroundColor: '#10b981',
+          pointBackgroundColor: '#059669',
           tension: 0.3,
           fill: false,
           spanGaps: false,
         },
         {
-          label: 'Prognose',
-          data: projData,
-          borderColor: '#10b981',
+          label: 'Optimistisk (8%)',
+          data: projOptimistic,
+          borderColor: 'rgba(5,150,105,0.4)',
+          borderDash: [4, 4],
+          borderWidth: 1.5,
+          pointRadius: 0,
+          tension: 0.3,
+          fill: false,
+          spanGaps: false,
+        },
+        {
+          label: `Realistisk (${(annualRate*100).toFixed(2)}%)`,
+          data: projRealistic,
+          borderColor: '#059669',
           borderDash: [5, 5],
           borderWidth: 2,
           pointRadius: 0,
           tension: 0.3,
-          fill: {target: 'origin', above: 'rgba(16,185,129,0.04)'},
+          fill: false,
+          spanGaps: false,
+        },
+        {
+          label: 'Pessimistisk (4%)',
+          data: projPessimistic,
+          borderColor: 'rgba(239,68,68,0.5)',
+          borderDash: [4, 4],
+          borderWidth: 1.5,
+          pointRadius: 0,
+          tension: 0.3,
+          fill: false,
           spanGaps: false,
         },
         {
           label: 'Mål',
           data: goalLine,
-          borderColor: 'rgba(245,158,11,0.5)',
+          borderColor: 'rgba(245,158,11,0.6)',
           borderWidth: 1.5,
           borderDash: [3, 5],
           pointRadius: 0,
@@ -1186,7 +1250,16 @@ function renderProjectionChart(currentVal, monthly, annualRate, yearsLeft) {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { display: false },
+        legend: {
+          display: true,
+          position: 'bottom',
+          labels: {
+            color: '#64748b',
+            font: { size: 10 },
+            boxWidth: 20,
+            padding: 10,
+          }
+        },
         tooltip: {
           backgroundColor: '#ffffff',
           borderColor: '#e2e8f0',
@@ -1262,6 +1335,8 @@ function renderHistory() {
 function saveSettings() {
   settings.returnRate = parseFloat(document.getElementById('setting-return').value) || 5.75;
   settings.monthlySaving = parseFloat(document.getElementById('setting-saving').value) || 5000;
+  settings.ipsAnnual = parseFloat(document.getElementById('setting-ips').value) || 25000;
+  settings.kpiRate = parseFloat(document.getElementById('setting-kpi').value) || 2.5;
   settings.goal = parseFloat(document.getElementById('setting-goal').value) || 10000000;
   settings.goalYear = parseInt(document.getElementById('setting-year').value) || 2039;
   saveSettingsLocal();
@@ -1315,6 +1390,8 @@ function initApp() {
   // Load settings into UI
   document.getElementById('setting-return').value = settings.returnRate;
   document.getElementById('setting-saving').value = settings.monthlySaving;
+  document.getElementById('setting-ips').value = settings.ipsAnnual || 25000;
+  document.getElementById('setting-kpi').value = settings.kpiRate || 2.5;
   document.getElementById('setting-goal').value = settings.goal;
   document.getElementById('setting-year').value = settings.goalYear;
   document.getElementById('sheet-id-input').value = settings.sheetId || '';

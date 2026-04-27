@@ -443,7 +443,7 @@
         <div class="stat-value" id="stat-return-year">—</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Årlig snitt siden start</div>
+        <div class="stat-label">XIRR siden 2015</div>
         <div class="stat-value" id="stat-return-annualized">—</div>
       </div>
       <div class="stat-card">
@@ -452,7 +452,7 @@
       </div>
       <div class="stat-card">
         <div class="stat-label">Forutsatt avkastning</div>
-        <div class="stat-value" id="stat-return">5,75%</div>
+        <div class="stat-value" id="stat-return">7,00%</div>
       </div>
     </div>
 
@@ -640,7 +640,7 @@
           <div class="setting-label">Avkastning per år</div>
           <div class="setting-sub">Brukes i fremskrivning</div>
         </div>
-        <input type="number" class="setting-input" id="setting-return" value="5.75" step="0.25" min="1" max="15">
+        <input type="number" class="setting-input" id="setting-return" value="7" step="0.25" min="1" max="15">
       </div>
       <div class="setting-row">
         <div>
@@ -746,7 +746,7 @@ let valuesHidden = false;
 // LOCAL SETTINGS (non-sensitive, OK in localStorage)
 // ============================================================
 let settings = {
-  returnRate: 5.75,
+  returnRate: 7.0,
   monthlySaving: 5000,
   ipsAnnual: 25000,
   kpiRate: 2.5,
@@ -1043,6 +1043,66 @@ function showSaveStatus(msg, type) {
 }
 
 // ============================================================
+// XIRR CALCULATION
+// ============================================================
+function calculateXIRR(data, currentTotal) {
+  try {
+    if (data.length < 2) return null;
+
+    // Build cashflows: negative = money in, positive = final value
+    const cashflows = [];
+    let firstRow = true;
+
+    for (const row of data) {
+      const saving = row.saving || 0;
+      if (saving <= 0) continue;
+      const date = new Date(row.date + '-01');
+
+      if (firstRow) {
+        // First entry: use total value as starting investment (best we have)
+        const startVal = row.totalOverride > 0 ? row.totalOverride : row.ask + row.af + row.fond + row.ips;
+        if (startVal > 0) {
+          cashflows.push({ date, amount: -startVal });
+          firstRow = false;
+          continue;
+        }
+      }
+      cashflows.push({ date, amount: -saving });
+      firstRow = false;
+    }
+
+    // Final value = current portfolio (positive cashflow)
+    const lastDate = new Date(data[data.length - 1].date + '-01');
+    cashflows.push({ date: lastDate, amount: currentTotal });
+
+    if (cashflows.length < 2) return null;
+
+    const t0 = cashflows[0].date;
+    const days = cashflows.map(cf => (cf.date - t0) / (1000 * 60 * 60 * 24));
+    const amounts = cashflows.map(cf => cf.amount);
+
+    // Newton-Raphson to find IRR
+    function npv(rate) {
+      return amounts.reduce((sum, cf, i) => sum + cf / Math.pow(1 + rate, days[i] / 365.25), 0);
+    }
+
+    // Binary search (robust)
+    let lo = -0.5, hi = 5.0;
+    for (let i = 0; i < 200; i++) {
+      const mid = (lo + hi) / 2;
+      if (npv(mid) > 0) lo = mid;
+      else hi = mid;
+      if (hi - lo < 0.00001) break;
+    }
+
+    const rate = (lo + hi) / 2;
+    return Math.abs(rate) > 4 ? null : rate; // sanity check
+  } catch(e) {
+    return null;
+  }
+}
+
+// ============================================================
 // DASHBOARD UPDATE
 // ============================================================
 function updateDashboard() {
@@ -1120,21 +1180,17 @@ function updateDashboard() {
     returnYearEl.className = 'stat-value';
   }
 
-  // Annualisert avkastning siden start (CAGR)
+  // XIRR - annualisert avkastning basert på faktiske cashflows
   const returnAnnEl = document.getElementById('stat-return-annualized');
   if (sheetsData.length > 1) {
-    const first = sheetsData[0];
-    const firstVal = first.totalOverride > 0 ? first.totalOverride : first.ask + first.af + first.fond + first.ips;
-    const firstDate = new Date(first.date + '-01');
-    const lastDate = new Date(latest.date + '-01');
-    const yearsElapsed = (lastDate - firstDate) / (1000 * 60 * 60 * 24 * 365.25);
-    const totalSaved = sheetsData.reduce((sum, r) => sum + (r.saving || 0), 0);
-    // Simple CAGR approximation: treat avg invested as (start + end) / 2
-    const avgInvested = (firstVal + privateTotal) / 2;
-    const gain = privateTotal - firstVal - totalSaved;
-    const annReturn = avgInvested > 0 && yearsElapsed > 0 ? (gain / avgInvested / yearsElapsed) * 100 : 0;
-    returnAnnEl.textContent = (annReturn >= 0 ? '+' : '') + annReturn.toFixed(1) + '% p.a.';
-    returnAnnEl.className = 'stat-value ' + (annReturn >= 0 ? 'green' : 'red');
+    const xirr = calculateXIRR(sheetsData, privateTotal);
+    if (xirr !== null) {
+      returnAnnEl.textContent = (xirr >= 0 ? '+' : '') + (xirr * 100).toFixed(1) + '% p.a.';
+      returnAnnEl.className = 'stat-value ' + (xirr >= 0 ? 'green' : 'red');
+    } else {
+      returnAnnEl.textContent = '—';
+      returnAnnEl.className = 'stat-value';
+    }
   } else {
     returnAnnEl.textContent = '—';
     returnAnnEl.className = 'stat-value';
